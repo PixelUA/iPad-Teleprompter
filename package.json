@@ -1,0 +1,14 @@
+{
+  "name": "teleprompter",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n server,client -c cyan,magenta \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node server/index.js",
+    "dev:client": "npm run dev --prefix client",
+    "build": "npm --prefix client install && npm --prefix client run build && npm --prefix server install",
+    "start": "node server/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
