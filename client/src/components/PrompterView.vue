@@ -56,6 +56,7 @@ let lastTime = 0
 let isNetworkOverride = false
 let networkOverrideTimeout = null
 let resizeObserver = null
+let reportViewportDebounce = null
 
 function lerpLoop(time) {
   const delta = time - lastTime
@@ -149,17 +150,27 @@ onMounted(() => {
   socket.emit('request-state')
 
   // Report viewport dimensions to server for Remote preview scaling
-  function reportViewport() {
-    socket.emit('report-viewport', {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    })
+  function reportViewport(immediate = false) {
+    if (immediate) {
+      socket.emit('report-viewport', {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      })
+      return
+    }
+    clearTimeout(reportViewportDebounce)
+    reportViewportDebounce = setTimeout(() => {
+      socket.emit('report-viewport', {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      })
+    }, 300)
   }
 
-  reportViewport()
+  reportViewport(true)
 
   resizeObserver = new ResizeObserver(() => {
-    reportViewport()
+    reportViewport(false)
   })
   resizeObserver.observe(document.documentElement)
 })
@@ -167,6 +178,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
   if (resizeObserver) resizeObserver.disconnect()
+  clearTimeout(reportViewportDebounce)
   socket.off('current-state', onCurrentState)
   socket.off('update-text', onUpdateText)
   socket.off('sync-scroll', onSyncScroll)

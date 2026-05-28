@@ -214,9 +214,14 @@ import { useSocket } from '../composables/useSocket'
 const { socket, connected } = useSocket()
 
 // ── State ─────────────────────────────────────────
-const text = ref('')
-const fontSize = ref(48)
-const isMirrored = ref(false)
+// Load initial text and settings from LocalStorage
+const savedText = localStorage.getItem('teleprompter-text') || ''
+const savedFontSize = localStorage.getItem('teleprompter-font-size')
+const savedMirrored = localStorage.getItem('teleprompter-mirrored')
+
+const text = ref(savedText)
+const fontSize = ref(savedFontSize ? parseInt(savedFontSize, 10) : 48)
+const isMirrored = ref(savedMirrored === 'true')
 const scrollPercent = ref(0)
 const scrollPreview = ref(null)
 
@@ -263,6 +268,7 @@ const previewMarkerTop = computed(() => {
 // ── Text ──────────────────────────────────────────
 let textDebounce = null
 function onTextChange() {
+  localStorage.setItem('teleprompter-text', text.value)
   clearTimeout(textDebounce)
   textDebounce = setTimeout(() => {
     socket.emit('update-text', text.value)
@@ -271,6 +277,8 @@ function onTextChange() {
 
 // ── Settings ──────────────────────────────────────
 function onSettingsChange() {
+  localStorage.setItem('teleprompter-font-size', fontSize.value)
+  localStorage.setItem('teleprompter-mirrored', isMirrored.value)
   socket.emit('update-settings', {
     fontSize: fontSize.value,
     isMirrored: isMirrored.value,
@@ -295,12 +303,14 @@ function onWheel() {
   }, 150)
 }
 
-let scrollThrottle = false
+let lastScrollEmitTime = 0
+let scrollEmitTimeout = null
+const EMIT_THROTTLE_MS = 60 // ~16 updates per second
+
 function onPreviewScroll() {
   // Only sync if the user is manually scrolling (interacting) OR auto-scroll is off
   // If auto-scroll is on and no interaction, we ignore this event to prevent feedback loop
-  if (scrollThrottle || (autoScrollActive.value && !isUserInteracting.value)) return
-  scrollThrottle = true
+  if (autoScrollActive.value && !isUserInteracting.value) return
 
   const el = scrollPreview.value
   if (!el) return
@@ -308,10 +318,26 @@ function onPreviewScroll() {
   const maxScroll = el.scrollHeight - el.clientHeight
   if (maxScroll > 0) {
     scrollPercent.value = el.scrollTop / maxScroll
-    socket.emit('sync-scroll', scrollPercent.value)
-  }
 
-  requestAnimationFrame(() => { scrollThrottle = false })
+    const now = performance.now()
+
+    // Clear any pending trailing-edge emit
+    if (scrollEmitTimeout) {
+      clearTimeout(scrollEmitTimeout)
+      scrollEmitTimeout = null
+    }
+
+    if (now - lastScrollEmitTime >= EMIT_THROTTLE_MS) {
+      socket.emit('sync-scroll', scrollPercent.value)
+      lastScrollEmitTime = now
+    } else {
+      // Schedule a trailing-edge emit to guarantee the final position is sent
+      scrollEmitTimeout = setTimeout(() => {
+        socket.emit('sync-scroll', scrollPercent.value)
+        lastScrollEmitTime = performance.now()
+      }, EMIT_THROTTLE_MS)
+    }
+  }
 }
 
 function scrollStep(delta) {
@@ -387,10 +413,27 @@ function toggleAutoScroll() {
 
 // ── Socket listeners ──────────────────────────────
 function onCurrentState(state) {
-  text.value = state.text || ''
-  fontSize.value = state.fontSize || 48
-  isMirrored.value = state.isMirrored || false
-  scrollPercent.value = state.scrollPercent || 0
+  // If the server state has no text, but we have locally saved text, restore it to the server
+  if (!state.text && text.value) {
+    socket.emit('update-text', text.value)
+    socket.emit('update-settings', {
+      fontSize: fontSize.value,
+      isMirrored: isMirrored.value,
+      autoScrollSpeed: autoScrollSpeed.value
+    })
+  } else {
+    // Server has a valid state, sync client to server
+    text.value = state.text || ''
+    fontSize.value = state.fontSize || 48
+    isMirrored.value = state.isMirrored || false
+    scrollPercent.value = state.scrollPercent || 0
+    
+    // Update local storage to match server state
+    localStorage.setItem('teleprompter-text', text.value)
+    localStorage.setItem('teleprompter-font-size', fontSize.value)
+    localStorage.setItem('teleprompter-mirrored', isMirrored.value)
+  }
+
   if (state.prompterViewport) {
     prompterViewport.value = state.prompterViewport
   }
@@ -428,5 +471,6 @@ onUnmounted(() => {
   }
   stopAutoScroll()
   clearTimeout(textDebounce)
+  clearTimeout(scrollEmitTimeout)
 })
 </script>
