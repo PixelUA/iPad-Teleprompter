@@ -159,22 +159,37 @@
         </div>
 
         <!-- Scroll preview area -->
-        <div
-          ref="scrollPreview"
-          @scroll="onPreviewScroll"
-          @touchstart="isUserInteracting = true"
-          @touchend="isUserInteracting = false"
-          @touchcancel="isUserInteracting = false"
-          @mousedown="isUserInteracting = true"
-          @mouseup="isUserInteracting = false"
-          @mouseleave="isUserInteracting = false"
-          @wheel="onWheel"
-          class="mt-6 h-[40vh] overflow-y-auto overflow-x-hidden rounded-xl bg-surface-800 border border-white/5
-                 text-base text-gray-300 leading-relaxed font-mono"
-          style="padding: 1.25rem;">
-          <div v-if="text" class="whitespace-pre-wrap break-words break-all w-full">{{ text }}</div>
-          <div v-else class="text-center text-gray-600 py-6">
-            <p>Text preview will appear here</p>
+        <div class="relative mt-6">
+          <!-- Read position markers -->
+          <div class="absolute left-1 z-10 pointer-events-none -translate-y-1/2"
+               :style="{ top: previewMarkerTop + 'px' }">
+            <div class="read-marker-left sm"></div>
+          </div>
+          <div class="absolute right-1 z-10 pointer-events-none -translate-y-1/2"
+               :style="{ top: previewMarkerTop + 'px' }">
+            <div class="read-marker-right sm"></div>
+          </div>
+
+          <div
+            ref="scrollPreview"
+            @scroll="onPreviewScroll"
+            @touchstart="isUserInteracting = true"
+            @touchend="isUserInteracting = false"
+            @touchcancel="isUserInteracting = false"
+            @mousedown="isUserInteracting = true"
+            @mouseup="isUserInteracting = false"
+            @mouseleave="isUserInteracting = false"
+            @wheel="onWheel"
+            class="h-[40vh] overflow-y-auto overflow-x-hidden rounded-xl bg-black border border-white/5
+                   text-white">
+            <div v-if="text" class="prompter-preview-text"
+                 :style="{
+                   fontSize: previewFontSize + 'px',
+                   padding: previewTopPad + 'px 10% ' + previewBottomPad + 'px 10%'
+                 }">{{ text }}</div>
+            <div v-else class="text-center text-gray-600 py-6" style="padding: 1.25rem;">
+              <p>Text preview will appear here</p>
+            </div>
           </div>
         </div>
 
@@ -210,6 +225,40 @@ const autoScrollSpeed = ref(1)
 let autoScrollInterval = null
 
 const charCount = computed(() => text.value.length)
+
+// ── Prompter Viewport Sync ────────────────────────
+const prompterViewport = ref({ width: 1024, height: 768 })
+const previewWidth = ref(300)
+const previewHeight = ref(300)
+
+const scale = computed(() => {
+  if (prompterViewport.value.width <= 0) return 1
+  return previewWidth.value / prompterViewport.value.width
+})
+
+const previewFontSize = computed(() => {
+  return Math.max(4, fontSize.value * scale.value)
+})
+
+// Vertical padding computed so that scroll % maps to the same text position.
+// Derivation: iPad top padding = 50vh = 0.5 * viewportHeight,
+// iPad total padding = 1.0 * viewportHeight.
+// For the linear scroll-to-text mapping to be identical on both devices:
+//   P_top_preview  = 0.5 * iPadHeight * scale
+//   P_bot_preview  = max(0, previewHeight - 0.5 * iPadHeight * scale)
+const previewTopPad = computed(() => {
+  return 0.5 * prompterViewport.value.height * scale.value
+})
+
+const previewBottomPad = computed(() => {
+  return Math.max(0, previewHeight.value - 0.5 * prompterViewport.value.height * scale.value)
+})
+
+// Position of the "read line" marker in the preview, corresponding to
+// the center of the iPad screen where the reader's eyes focus.
+const previewMarkerTop = computed(() => {
+  return 0.5 * prompterViewport.value.height * scale.value
+})
 
 // ── Text ──────────────────────────────────────────
 let textDebounce = null
@@ -342,15 +391,41 @@ function onCurrentState(state) {
   fontSize.value = state.fontSize || 48
   isMirrored.value = state.isMirrored || false
   scrollPercent.value = state.scrollPercent || 0
+  if (state.prompterViewport) {
+    prompterViewport.value = state.prompterViewport
+  }
 }
+
+function onViewportInfo(viewport) {
+  prompterViewport.value = viewport
+}
+
+let previewObserver = null
 
 onMounted(() => {
   socket.on('current-state', onCurrentState)
+  socket.on('viewport-info', onViewportInfo)
   socket.emit('request-state')
+
+  // Track preview dimensions for scaled rendering
+  if (scrollPreview.value) {
+    previewObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        previewWidth.value = entry.contentRect.width
+        previewHeight.value = entry.contentRect.height
+      }
+    })
+    previewObserver.observe(scrollPreview.value)
+  }
 })
 
 onUnmounted(() => {
   socket.off('current-state', onCurrentState)
+  socket.off('viewport-info', onViewportInfo)
+  if (previewObserver) {
+    previewObserver.disconnect()
+    previewObserver = null
+  }
   stopAutoScroll()
   clearTimeout(textDebounce)
 })

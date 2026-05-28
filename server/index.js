@@ -32,6 +32,7 @@ const state = {
   scrollPercent: 0,
   autoScrollSpeed: 0,
   isAutoScrolling: false,
+  prompterViewport: { width: 1024, height: 768 },
 };
 
 // ── Socket.IO Events ──────────────────────────────────────
@@ -60,6 +61,12 @@ io.on('connection', (socket) => {
     if (settings.autoScrollSpeed !== undefined) state.autoScrollSpeed = settings.autoScrollSpeed;
     if (settings.isAutoScrolling !== undefined) state.isAutoScrolling = settings.isAutoScrolling;
     socket.broadcast.emit('update-settings', settings);
+  });
+
+  // Viewport report from Prompter (iPad)
+  socket.on('report-viewport', (viewport) => {
+    state.prompterViewport = viewport;
+    socket.broadcast.emit('viewport-info', viewport);
   });
 
   // Request full state refresh

@@ -12,12 +12,20 @@
       </div>
     </div>
 
+    <!-- Read position markers (fixed at screen center) -->
+    <div class="fixed left-0 top-1/2 -translate-y-1/2 z-40 pointer-events-none" style="padding-left: 12px;">
+      <div class="read-marker-left"></div>
+    </div>
+    <div class="fixed right-0 top-1/2 -translate-y-1/2 z-40 pointer-events-none" style="padding-right: 12px;">
+      <div class="read-marker-right"></div>
+    </div>
+
     <div ref="textContainer"
-         class="prompter-text w-full min-h-dvh px-8 sm:px-16 md:px-32 lg:px-48"
+         class="prompter-text w-full min-h-dvh"
          :class="{ mirrored: isMirrored }"
          :style="{ fontSize: fontSize + 'px' }">
-      <div v-if="text" class="py-[50vh]">{{ text }}</div>
-      <div v-else class="flex items-center justify-center min-h-dvh">
+      <div v-if="text">{{ text }}</div>
+      <div v-else class="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div class="text-center" :class="{ mirrored: isMirrored }">
           <p class="text-lg opacity-30 font-light">Waiting for text...</p>
           <p class="text-sm opacity-15 mt-2">Open Remote on your phone to start</p>
@@ -47,6 +55,7 @@ let lastTime = 0
 
 let isNetworkOverride = false
 let networkOverrideTimeout = null
+let resizeObserver = null
 
 function lerpLoop(time) {
   const delta = time - lastTime
@@ -138,10 +147,26 @@ onMounted(() => {
   socket.on('sync-scroll', onSyncScroll)
   socket.on('update-settings', onUpdateSettings)
   socket.emit('request-state')
+
+  // Report viewport dimensions to server for Remote preview scaling
+  function reportViewport() {
+    socket.emit('report-viewport', {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    })
+  }
+
+  reportViewport()
+
+  resizeObserver = new ResizeObserver(() => {
+    reportViewport()
+  })
+  resizeObserver.observe(document.documentElement)
 })
 
 onUnmounted(() => {
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
+  if (resizeObserver) resizeObserver.disconnect()
   socket.off('current-state', onCurrentState)
   socket.off('update-text', onUpdateText)
   socket.off('sync-scroll', onSyncScroll)

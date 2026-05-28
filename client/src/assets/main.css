@@ -64,7 +64,17 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
   transition: font-size 0.2s ease;
-  padding: 10vh 5vw !important;
+  padding: 50vh 10vw !important;
+}
+
+/* Mirror of .prompter-text for the scaled preview on Remote (phone) */
+.prompter-preview-text {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Bulletproof Layout Paddings */
@@ -235,4 +245,37 @@ input[type="range"]::-moz-range-thumb {
 .status-dot.disconnected {
   background: #ef4444;
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+/* ── Read Position Markers ──────────────────────── */
+.read-marker-left {
+  width: 0;
+  height: 0;
+  border-top: 12px solid transparent;
+  border-bottom: 12px solid transparent;
+  border-left: 16px solid rgba(255, 68, 68, 0.85);
+  filter: drop-shadow(0 0 6px rgba(255, 68, 68, 0.5));
+}
+
+.read-marker-right {
+  width: 0;
+  height: 0;
+  border-top: 12px solid transparent;
+  border-bottom: 12px solid transparent;
+  border-right: 16px solid rgba(255, 68, 68, 0.85);
+  filter: drop-shadow(0 0 6px rgba(255, 68, 68, 0.5));
+}
+
+.read-marker-left.sm {
+  border-top-width: 7px;
+  border-bottom-width: 7px;
+  border-left-width: 10px;
+  filter: drop-shadow(0 0 4px rgba(255, 68, 68, 0.4));
+}
+
+.read-marker-right.sm {
+  border-top-width: 7px;
+  border-bottom-width: 7px;
+  border-right-width: 10px;
+  filter: drop-shadow(0 0 4px rgba(255, 68, 68, 0.4));
 }
